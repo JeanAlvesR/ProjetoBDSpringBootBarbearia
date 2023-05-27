@@ -1,0 +1,225 @@
+------------------------------------------------------------------------------------------------------------------------------------------
+-- criacao do banco de dados
+CREATE DATABASE Barbearia;
+
+
+-- Criação da tabela "usuario"
+CREATE TABLE usuario (
+  cpf varchar(14) PRIMARY KEY,
+  email varchar(60) NOT NULL UNIQUE,
+  senha varchar(60) NOT NULL,
+  data_registro timestamp,
+  role_usuario varchar(20) CHECK (role_usuario IN ('cliente', 'gestor', 'barbeiro'))  
+);
+
+-- Criação da tabela "cliente"
+CREATE TABLE cliente (
+  cpf_cliente varchar(14) REFERENCES usuario (cpf) UNIQUE ON DELETE CASCADE,
+  nome_cliente varchar(30) NOT NULL,
+  telefone_cliente varchar(15),
+  qtd_agendamento integer,
+  qtd_promocao integer
+);
+
+-- Criação da tabela "barbeiro"
+CREATE TABLE barbeiro (
+  cpf_barbeiro varchar(14) REFERENCES usuario(cpf) UNIQUE ON DELETE CASCADE,
+  nome_barbeiro varchar(30) NOT NULL,
+  telefone_barbeiro varchar(15),
+  media_nota numeric(2,1)
+);
+
+-- Criação da tabela "comentario"
+CREATE TABLE comentario (
+  cpf_barbeiro varchar(14) REFERENCES barbeiro(cpf_barbeiro),
+  descricao varchar(255),
+  nota numeric(2,1)
+);
+
+
+-- Criação da tabela "agendamento"
+CREATE TABLE agendamento (
+  cpf_barbeiro varchar(14),
+  data_horario timestamp,
+  cpf_cliente varchar(14) NOT NULL,
+  descricao_corte varchar(255),
+  valorTotal double precision NOT NULL,
+  status varchar(20) CHECK (status IN ('andamento', 'concluido', 'cancelado')),
+  PRIMARY KEY (cpf_barbeiro, data_horario),
+  FOREIGN KEY (cpf_barbeiro) REFERENCES barbeiro(cpf_barbeiro) ON DELETE CASCADE,
+  FOREIGN KEY (cpf_cliente) REFERENCES cliente(cpf_cliente) ON DELETE CASCADE
+);
+
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+-- funcao para atualizar agendamento e promocao
+
+-- Criação da trigger "tr_atualiza_qtd_agendamento"
+CREATE OR REPLACE FUNCTION atualiza_qtd_agendamento()
+  RETURNS TRIGGER AS
+$$
+DECLARE
+  qtde_agendamentos INTEGER;
+BEGIN
+  IF (NEW.cpf_cliente IS NOT NULL) THEN -- Verifica se o agendamento está associado a um cliente
+    SELECT qtd_agendamento INTO qtde_agendamentos
+    FROM cliente
+    WHERE cpf_cliente = NEW.cpf_cliente;
+
+    IF (qtde_agendamentos + 1 = 10) THEN
+      UPDATE cliente
+      SET qtd_promocao = qtd_promocao + 1,
+          qtd_agendamento = 0
+      WHERE cpf_cliente = NEW.cpf_cliente;
+    ELSE
+      UPDATE cliente
+      SET qtd_agendamento = qtde_agendamentos + 1
+      WHERE cpf_cliente = NEW.cpf_cliente;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$
+LANGUAGE plpgsql;
+
+-- Criação da trigger associada à tabela "agendamento"
+CREATE TRIGGER tr_atualiza_qtd_agendamento
+AFTER INSERT ON agendamento
+FOR EACH ROW
+EXECUTE FUNCTION atualiza_qtd_agendamento();
+
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+
+-- funcao para verificar agendamento
+
+CREATE OR REPLACE FUNCTION verificar_horario_agendamento()
+  RETURNS TRIGGER AS
+$$
+DECLARE
+  contador integer;
+BEGIN
+  -- Verifica se existe algum agendamento do barbeiro dentro do intervalo de 40 minutos em relação ao novo agendamento
+  SELECT COUNT(*) INTO contador
+  FROM agendamento
+  WHERE cpf_barbeiro = NEW.cpf_barbeiro
+    AND data_horario > NEW.data_horario - INTERVAL '40 minutes'
+    AND data_horario < NEW.data_horario + INTERVAL '40 minutes'
+    AND status = 'andamento';
+
+  -- Se houver algum agendamento em andamento no intervalo, lança uma exceção
+  IF contador > 0 THEN
+    RAISE EXCEPTION 'O horário do agendamento deve ter pelo menos 40 minutos de diferença em relação a outros agendamentos em andamento do barbeiro.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$
+LANGUAGE plpgsql;
+
+-- Criação da trigger associada à tabela "agendamento"
+CREATE TRIGGER tr_verificar_horario_agendamento
+BEFORE INSERT ON agendamento
+FOR EACH ROW
+EXECUTE FUNCTION verificar_horario_agendamento();
+
+
+------------------------------------------------------------------------------------------------------------------------------------------
+--Função para cancelar_agendamento
+
+CREATE OR REPLACE FUNCTION cancelar_agendamento(cpf_cliente_cancelamento varchar(14), data_cancelamento TIMESTAMP)
+RETURNS VOID AS
+$$
+DECLARE
+  qtd_agendamentos INT;
+  qtd_promocaos INT;
+BEGIN
+  UPDATE agendamento
+  SET status = 'cancelado'
+  WHERE cpf_cliente = cpf_cliente_cancelamento AND data_horario = data_cancelamento;
+  
+  -- Verifica a tabela cliente
+  SELECT cliente.qtd_agendamento, cliente.qtd_promocao INTO qtd_agendamentos, qtd_promocaos
+  FROM cliente
+  WHERE cpf_cliente = cpf_cliente_cancelamento;
+  
+  -- Verifica a condição quantidade_agendamentos = 0 e promocao = 1
+  IF qtd_agendamentos = 0 AND qtd_promocaos = 1 THEN
+    UPDATE cliente
+    SET qtd_agendamento = 9, qtd_promocao = 0
+    WHERE cpf_cliente  = cpf_cliente_cancelamento;
+    
+  -- Verifica a condição quantidade_promocao = 0 e quantidade_agendamentos = 0
+  ELSIF qtd_promocaos = 0 AND qtd_agendamentos = 0 THEN
+    UPDATE cliente
+    SET qtd_promocao = 1
+    WHERE cpf_cliente = cpf_cliente_cancelamento;
+    
+  -- Outros casos, retira 1 da quantidade_agendamentos
+  ELSE
+    UPDATE cliente
+    SET qtd_agendamento = qtd_agendamentos - 1
+    WHERE cpf_cliente  = cpf_cliente_cancelamento;
+  END IF;
+END;
+$$
+LANGUAGE plpgsql;
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+--trigger para calcular a média quando o comentario é inserido
+
+
+CREATE OR REPLACE FUNCTION calcular_media_nota()
+  RETURNS TRIGGER AS
+$$
+DECLARE
+  soma_notas numeric;
+  total_comentarios integer;
+  nota_media numeric;
+BEGIN
+  -- Calcula a soma das notas dos comentários para o barbeiro atual
+  SELECT SUM(nota) INTO soma_notas
+  FROM comentario
+  WHERE cpf_barbeiro = NEW.cpf_barbeiro;
+  
+  -- Conta a quantidade total de comentários para o barbeiro atual
+  SELECT COUNT(*) INTO total_comentarios
+  FROM comentario
+  WHERE cpf_barbeiro = NEW.cpf_barbeiro;
+  
+  -- Calcula a média das notas
+  nota_media := soma_notas / total_comentarios;
+
+  -- Atualiza a nota média na tabela de barbeiros
+  UPDATE barbeiro
+  SET media_nota = nota_media
+  WHERE cpf_barbeiro = NEW.cpf_barbeiro;
+  
+  RETURN NEW;
+END;
+$$
+LANGUAGE plpgsql;
+
+-- Criação da trigger associada à tabela "comentario"
+CREATE TRIGGER tr_calcular_media_nota
+AFTER INSERT ON comentario
+FOR EACH ROW
+EXECUTE FUNCTION calcular_media_nota();
+
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+-- INSERTS para testar o banco
+
+
+
+
+
