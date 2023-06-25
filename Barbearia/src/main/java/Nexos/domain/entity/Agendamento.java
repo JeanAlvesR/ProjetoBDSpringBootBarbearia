@@ -28,7 +28,7 @@ public class Agendamento {
     @JsonIgnore
     private Barbeiro barbeiro;
 
-    @JoinColumn(name = "cliente")
+    @JoinColumn(name = "cpf_cliente")
     @ManyToOne
     @JsonIgnore
     private Cliente cliente;

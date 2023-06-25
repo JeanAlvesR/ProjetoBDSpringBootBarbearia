@@ -1,9 +1,8 @@
 package Nexos.domain.entity;
 
 import Nexos.domain.entity.enums.Role;
-import Nexos.domain.entity.enums.Status;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 import java.sql.Timestamp;
@@ -14,6 +13,7 @@ public class Usuario {
     @Id
     private String cpf;
     private String email;
+    @JsonIgnore
     private String senha;
     private Timestamp data_registro;
 

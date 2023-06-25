@@ -16,11 +16,9 @@ public class Cliente {
     @Id
     private String cpf;
 
-    @MapsId("cpf")
-    @JoinColumn(name = "cpf")
-    @OneToOne
-    @JsonIgnore
-    private Usuario usuario;
+    private String nome;
+
+    private String telefone;
 
     @Column(name = "qtd_agendamento")
     private Integer qtdAgendamento;
@@ -28,6 +26,11 @@ public class Cliente {
     @Column(name = "qtd_promocao")
     private Integer qtdPromocao;
 
+    @MapsId("cpf")
+    @JoinColumn(name = "cpf")
+    @OneToOne
+    @JsonIgnore
+    private Usuario usuario;
     @OneToMany(mappedBy = "cliente")
     private List<Agendamento> agendamentos;
 

@@ -17,11 +17,9 @@ public class Comentario {
     private Integer id;
     private String descricao;
     private Double nota;
-    @JoinColumn(name = "cpf")
+    @JoinColumn(name = "cpf_barbeiro")
     @ManyToOne
     @JsonIgnore
     private Barbeiro barbeiro;
-
-
 
 }
