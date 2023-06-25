@@ -1,37 +1,33 @@
-------------------------------------------------------------------------------------------------------------------------------------------
--- criacao do banco de dados
-CREATE DATABASE Barbearia;
-
-
 -- Criação da tabela "usuario"
 CREATE TABLE usuario (
   cpf varchar(14) PRIMARY KEY,
   email varchar(60) NOT NULL UNIQUE,
   senha varchar(60) NOT NULL,
   data_registro timestamp,
-  role_usuario varchar(20) CHECK (role_usuario IN ('cliente', 'gestor', 'barbeiro'))  
+  role_usuario varchar(20) CHECK (role_usuario IN ('cliente', 'gestor', 'barbeiro'))  NOT NULL
 );
 
 -- Criação da tabela "cliente"
 CREATE TABLE cliente (
-  cpf_cliente varchar(14) REFERENCES usuario (cpf) UNIQUE ON DELETE CASCADE,
-  nome_cliente varchar(30) NOT NULL,
-  telefone_cliente varchar(15),
+  cpf varchar(14) REFERENCES usuario (cpf) UNIQUE,
+  nome varchar(30) NOT NULL,
+  telefone varchar(15),
   qtd_agendamento integer,
   qtd_promocao integer
 );
 
 -- Criação da tabela "barbeiro"
 CREATE TABLE barbeiro (
-  cpf_barbeiro varchar(14) REFERENCES usuario(cpf) UNIQUE ON DELETE CASCADE,
-  nome_barbeiro varchar(30) NOT NULL,
-  telefone_barbeiro varchar(15),
+  cpf varchar(14) REFERENCES usuario(cpf) UNIQUE,
+  nome varchar(30) NOT NULL,
+  telefone varchar(15),
   media_nota numeric(2,1)
 );
 
 -- Criação da tabela "comentario"
 CREATE TABLE comentario (
-  cpf_barbeiro varchar(14) REFERENCES barbeiro(cpf_barbeiro),
+  id SERIAL PRIMARY KEY,
+  cpf_barbeiro varchar(14) REFERENCES barbeiro(cpf),
   descricao varchar(255),
   nota numeric(2,1)
 );
@@ -46,14 +42,9 @@ CREATE TABLE agendamento (
   valorTotal double precision NOT NULL,
   status varchar(20) CHECK (status IN ('andamento', 'concluido', 'cancelado')),
   PRIMARY KEY (cpf_barbeiro, data_horario),
-  FOREIGN KEY (cpf_barbeiro) REFERENCES barbeiro(cpf_barbeiro) ON DELETE CASCADE,
-  FOREIGN KEY (cpf_cliente) REFERENCES cliente(cpf_cliente) ON DELETE CASCADE
+  FOREIGN KEY (cpf_barbeiro) REFERENCES barbeiro(cpf) ON DELETE CASCADE,
+  FOREIGN KEY (cpf_cliente) REFERENCES cliente(cpf) ON DELETE CASCADE
 );
-
-
-------------------------------------------------------------------------------------------------------------------------------------------
-
--- funcao para atualizar agendamento e promocao
 
 -- Criação da trigger "tr_atualiza_qtd_agendamento"
 CREATE OR REPLACE FUNCTION atualiza_qtd_agendamento()
@@ -61,40 +52,45 @@ CREATE OR REPLACE FUNCTION atualiza_qtd_agendamento()
 $$
 DECLARE
   qtde_agendamentos INTEGER;
+  qtde_promocao INTEGER;
 BEGIN
-  IF (NEW.cpf_cliente IS NOT NULL) THEN -- Verifica se o agendamento está associado a um cliente
+ IF (NEW.cpf_cliente IS NOT NULL) THEN -- Verifica se o agendamento está associado a um cliente
     SELECT qtd_agendamento INTO qtde_agendamentos
     FROM cliente
-    WHERE cpf_cliente = NEW.cpf_cliente;
-
-    IF (qtde_agendamentos + 1 = 10) THEN
+    WHERE cpf = NEW.cpf_cliente;
+	
+	SELECT qtd_promocao INTO qtde_promocao
+	FROM cliente
+	WHERE cpf = NEW.cpf_cliente;
+	
+	IF (qtde_promocao > 0) THEN
+	UPDATE cliente
+      SET qtd_promocao = qtd_promocao - 1
+      WHERE cpf = NEW.cpf_cliente;
+	  NEW.valorTotal:=0.00;
+    ELSIF  (qtde_agendamentos + 1 = 10) THEN
       UPDATE cliente
       SET qtd_promocao = qtd_promocao + 1,
           qtd_agendamento = 0
-      WHERE cpf_cliente = NEW.cpf_cliente;
+      WHERE cpf = NEW.cpf_cliente;
     ELSE
       UPDATE cliente
       SET qtd_agendamento = qtde_agendamentos + 1
-      WHERE cpf_cliente = NEW.cpf_cliente;
+      WHERE cpf = NEW.cpf_cliente;
     END IF;
-  END IF;
+ELSE
+	RAISE EXCEPTION 'CPF NÃO PODE SER NULL'; 
+END IF;
 
   RETURN NEW;
 END;
 $$
 LANGUAGE plpgsql;
 
--- Criação da trigger associada à tabela "agendamento"
 CREATE TRIGGER tr_atualiza_qtd_agendamento
-AFTER INSERT ON agendamento
+BEFORE INSERT ON agendamento
 FOR EACH ROW
 EXECUTE FUNCTION atualiza_qtd_agendamento();
-
-
-------------------------------------------------------------------------------------------------------------------------------------------
-
-
--- funcao para verificar agendamento
 
 CREATE OR REPLACE FUNCTION verificar_horario_agendamento()
   RETURNS TRIGGER AS
@@ -126,10 +122,6 @@ BEFORE INSERT ON agendamento
 FOR EACH ROW
 EXECUTE FUNCTION verificar_horario_agendamento();
 
-
-------------------------------------------------------------------------------------------------------------------------------------------
---Função para cancelar_agendamento
-
 CREATE OR REPLACE FUNCTION cancelar_agendamento(cpf_cliente_cancelamento varchar(14), data_cancelamento TIMESTAMP)
 RETURNS VOID AS
 $$
@@ -144,33 +136,29 @@ BEGIN
   -- Verifica a tabela cliente
   SELECT cliente.qtd_agendamento, cliente.qtd_promocao INTO qtd_agendamentos, qtd_promocaos
   FROM cliente
-  WHERE cpf_cliente = cpf_cliente_cancelamento;
+  WHERE cpf = cpf_cliente_cancelamento;
   
   -- Verifica a condição quantidade_agendamentos = 0 e promocao = 1
   IF qtd_agendamentos = 0 AND qtd_promocaos = 1 THEN
     UPDATE cliente
     SET qtd_agendamento = 9, qtd_promocao = 0
-    WHERE cpf_cliente  = cpf_cliente_cancelamento;
+    WHERE cpf  = cpf_cliente_cancelamento;
     
   -- Verifica a condição quantidade_promocao = 0 e quantidade_agendamentos = 0
   ELSIF qtd_promocaos = 0 AND qtd_agendamentos = 0 THEN
     UPDATE cliente
     SET qtd_promocao = 1
-    WHERE cpf_cliente = cpf_cliente_cancelamento;
+    WHERE cpf = cpf_cliente_cancelamento;
     
   -- Outros casos, retira 1 da quantidade_agendamentos
   ELSE
     UPDATE cliente
     SET qtd_agendamento = qtd_agendamentos - 1
-    WHERE cpf_cliente  = cpf_cliente_cancelamento;
+    WHERE cpf  = cpf_cliente_cancelamento;
   END IF;
 END;
 $$
 LANGUAGE plpgsql;
-
-
-
-------------------------------------------------------------------------------------------------------------------------------------------
 
 --trigger para calcular a média quando o comentario é inserido
 
@@ -199,7 +187,7 @@ BEGIN
   -- Atualiza a nota média na tabela de barbeiros
   UPDATE barbeiro
   SET media_nota = nota_media
-  WHERE cpf_barbeiro = NEW.cpf_barbeiro;
+  WHERE cpf = NEW.cpf_barbeiro;
   
   RETURN NEW;
 END;
@@ -213,11 +201,48 @@ FOR EACH ROW
 EXECUTE FUNCTION calcular_media_nota();
 
 
-------------------------------------------------------------------------------------------------------------------------------------------
+
+-- Inserções na tabela "usuario"
+INSERT INTO usuario (cpf, email, senha, data_registro, role_usuario) VALUES
+('111.111.111-11', 'usuario1@example.com', 'senha123', NOW(), 'cliente'),
+('222.222.222-22', 'usuario2@example.com', 'senha456', NOW(), 'cliente'),
+('333.333.333-33', 'usuario3@example.com', 'senha789', NOW(), 'barbeiro'),
+('444.444.444-44', 'usuario4@example.com', 'senhaabc', NOW(), 'barbeiro'),
+('555.555.555-55', 'usuario5@example.com', 'senhaxyz', NOW(), 'gestor');
+
+INSERT INTO cliente (cpf, nome, telefone, qtd_agendamento, qtd_promocao) VALUES
+('111.111.111-11', 'Cliente 1', '1111111111', 3, 2),
+('222.222.222-22', 'Cliente 2', '2222222222', 1, 0);
+
+-- Inserções na tabela "barbeiro"
+INSERT INTO barbeiro (cpf, nome, telefone, media_nota) VALUES
+('333.333.333-33', 'Barbeiro 1', '6666666666', 4.5),
+('444.444.444-44', 'Barbeiro 2', '7777777777', 3.8);
 
 
+-- Inserções na tabela "comentario"
+INSERT INTO comentario (cpf_barbeiro, descricao, nota) VALUES
+('333.333.333-33', 'Ótimo atendimento!', 4.5),
+('333.333.333-33', 'Corte de cabelo perfeito!', 5.0),
+('444.444.444-44', 'Poderia ser melhor.', 3.0);
 
--- INSERTS para testar o banco
+-- Inserções na tabela "agendamento"
+INSERT INTO agendamento (cpf_barbeiro, data_horario, cpf_cliente, descricao_corte, valorTotal, status) VALUES
+('333.333.333-33', '2023-06-26 20:40:00', '111.111.111-11', 'Corte de cabelo masculino', 50.0, 'andamento');
+('333.333.333-33', '2023-06-26 15:30:00', '222.222.222-22', 'Corte de barba', 30.0, 'andamento');
+
+UPDATE CLIENTE
+SET qtd_promocao = 2
+where cpf = '111.111.111-11'
+
+select * from agendamento
+
+select * from CLIENTE
+
+
+SELECT cancelar_agendamento('222.222.222-22', '2023-06-26 15:30:00' );
+
+
 
 
 

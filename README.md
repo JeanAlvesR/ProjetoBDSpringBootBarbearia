@@ -1,5 +1,51 @@
-(README em andamento...)
-Este é um projeto Spring Boot para uma aplicação de gerenciamento de uma barbearia. A aplicação utiliza o banco de dados PostgreSQL para armazenar os dados relacionados aos usuários, clientes, barbeiros, agendamentos e comentários.
+# Backend da Barbearia em Spring Boot com API REST
+
+Este é o repositório do backend da aplicação de uma barbearia desenvolvida em Spring Boot, utilizando API REST. 
+
+## Tecnologias utilizadas
+
+- Java
+- Spring Boot
+- Maven
+- JPA e Hibernate
+
+## Estrutura do projeto
+
+O projeto está dividido em camadas para melhor organização e separação de responsabilidades. As camadas são:
+
+1. **Controller**: Responsável por receber as requisições REST e encaminhá-las para os respectivos serviços.
+2. **Service**: Contém a lógica de negócio da aplicação e realiza a comunicação com o repositório.
+3. **Repository**: Responsável pela interação com o banco de dados, utilizando JPA e Hibernate.
+
+## Funcionalidades implementadas
+
+- API REST para gerenciamento da barbearia.
+- Utilização de enums para os tipos de usuário (Role) e status.
+- Scheduler para verificação de agendamentos e mudança de status de "andamento" para "concluído".
+- Tratamento de exceções personalizadas utilizando RestControllerAdvice.
+- Testes no Postman para validar as funcionalidades da API.
+
+## Próximas melhorias
+
+Devido à falta de tempo, algumas funcionalidades não foram implementadas no momento. As próximas melhorias planejadas são:
+
+- Adicionar autenticação nas rotas da API para garantir a segurança.
+- Implementar DTO (Data Transfer Object) para melhorar a estrutura e segurança das informações transmitidas pela API.
+- Substituir o banco de dados H2-console por PostgreSQL para um ambiente de produção mais robusto.
+- Testes Unitários e de Integração
+
+## Como executar o projeto
+
+1. Certifique-se de ter o Java (19 ou superior) e o Maven instalados em sua máquina.
+2. Clone este repositório para sua máquina local.
+
+## Contato
+
+Se tiver alguma dúvida ou sugestão, por favor, entre em contato conosco:
+
+Nome: Jean Alves Rocha
+Email: EngJeanR@gmail.com
+
 
 ## Configuração do Banco de Dados
 
@@ -35,6 +81,7 @@ Além disso, foram implementadas duas triggers (Por enquanto) no banco de dados:
 
 1. Trigger "tr_verificar_horario_agendamento": Impede o agendamento de um corte de cabelo dentro de um período de 40 minutos de um agendamento já existente com status "andamento".
 2. Trigger "tr_atualiza_qtd_agendamento": Toda vez que um agendamento é feito, ele verifica a quantidade de agendamentos feitos e, se chegar a 10, a pessoa ganha uma promocao e os agendamentos zeram, se não chegar, aumenta mais 1 nos agendamentos.
+3 - Função para cancelar agendamento.
 
 ## Licença
 
