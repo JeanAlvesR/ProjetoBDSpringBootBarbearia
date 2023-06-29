@@ -58,9 +58,11 @@ O banco de dados utilizado é o PostgreSQL. Certifique-se de ter o PostgreSQL in
 3. No arquivo `application.properties`, atualize as seguintes propriedades para refletir a configuração do seu banco de dados:
 
 ```properties
-spring.datasource.url=jdbc:postgresql://localhost:5432/Barbearia
-spring.datasource.username=postgres
-spring.datasource.password=1234
+server.port=8081
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driver-class-name=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
 ```
 
 ## Tabelas e Triggers
